@@ -136,6 +136,7 @@ df_Charging = pd.DataFrame(columns=['curTime','load_T', 'loadRatio_T'])
 @st.cache_data    #缓存装饰器
 def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Charging,num_T1,num_T2,num_T3,num_T4,num_T5,num_T6,num_P1,num_P2,num_P3,num_P4,num_P5,num_P6):
     num_chargedBattery = 0 #已充电电池数量, 服务能力
+    curNum_Battery = 0 #电池仓中当前电池数量
     #tolPower_Transformer = 500 #变压器总功率
     load_Transformer, loadRatio_Transformer = [],[]
     #maxNum_Battery = 4 #电池仓容纳的最大电池数量,以4为例
@@ -166,22 +167,44 @@ def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Chargi
     curPower_BatteryArray = np.array(curPower_BatteryList)
     
     for curTime in range(ChargingTime_interval-1): #未到总时长限制,开始充电,逐分钟刷新
-        for i in range(maxNum_Battery):                             
-            #电池更新充电状态,每块均需判断功率是否受限                   
-            if names['Battery' + str(i)]['Positive_Clock'] < clockLength  or names['Battery' + str(i)]['charged_power'] < powerVolume:
-                resPower_Transformer = tolPower_Transformer - sum(np.delete(curPower_BatteryArray, i))    
-                if resPower_Transformer > 0:
-                    names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = charge_Limitedphase3(names['Battery' + str(i)]['Positive_Clock'],names['Battery' + str(i)]['SOC'],resPower_Transformer,names['Battery' + str(i)]['charged_power'],clockLength,powerVolume,Battery)
+        if curTime%6 == 0:  #每6分钟换电，初始状态连续换电，满载后单块电池满电后换，取余
+            curNum_Battery +=1  #新增一块电池
+
+        if curNum_Battery < maxNum_Battery:  #充电仓不满，陆续放电池, 最大同时充电次数受充电仓电池数量限制
+            print('当前电池数：{}'.format(curNum_Battery))
+            for i in range(curNum_Battery):           
+                print('当前电池数-i：{}'.format(curNum_Battery))                  
+                #电池更新充电状态,每块均需判断功率是否受限                   
+                if names['Battery' + str(i)]['Positive_Clock'] < clockLength  or names['Battery' + str(i)]['charged_power'] < powerVolume:
+                    resPower_Transformer = tolPower_Transformer - sum(np.delete(curPower_BatteryArray, i))    
+                    if resPower_Transformer > 0:
+                        names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = charge_Limitedphase3(names['Battery' + str(i)]['Positive_Clock'],names['Battery' + str(i)]['SOC'],resPower_Transformer,names['Battery' + str(i)]['charged_power'],clockLength,powerVolume,Battery)
+                    else:
+                        names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'] = 0, names['Battery' + str(i)]['SOC'] 
+                        names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power']
                 else:
-                    names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'] = 0, names['Battery' + str(i)]['SOC'] 
-                    names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power']
-            else:
+                    names['curPower_Battery' + str(i)],names['Battery' + str(i)]['SOC'] = Battery.P1, 1
+                    names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = 0, 0
+                    num_chargedBattery += 1
                 
-                names['curPower_Battery' + str(i)],names['Battery' + str(i)]['SOC'] = Battery.P1, 1
-                names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = 0, 0
-                num_chargedBattery += 1
-            
-            curPower_BatteryArray[i] = names['curPower_Battery' + str(i)]
+                curPower_BatteryArray[i] = names['curPower_Battery' + str(i)]
+
+        else:        
+            for i in range(maxNum_Battery):                             
+                #电池更新充电状态,每块均需判断功率是否受限                   
+                if names['Battery' + str(i)]['Positive_Clock'] < clockLength  or names['Battery' + str(i)]['charged_power'] < powerVolume:
+                    resPower_Transformer = tolPower_Transformer - sum(np.delete(curPower_BatteryArray, i))    
+                    if resPower_Transformer > 0:
+                        names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = charge_Limitedphase3(names['Battery' + str(i)]['Positive_Clock'],names['Battery' + str(i)]['SOC'],resPower_Transformer,names['Battery' + str(i)]['charged_power'],clockLength,powerVolume,Battery)
+                    else:
+                        names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'] = 0, names['Battery' + str(i)]['SOC'] 
+                        names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power']
+                else:
+                    names['curPower_Battery' + str(i)],names['Battery' + str(i)]['SOC'] = Battery.P1, 1
+                    names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = 0, 0
+                    num_chargedBattery += 1
+                
+                curPower_BatteryArray[i] = names['curPower_Battery' + str(i)]
 
         curPower_ChargingBattery = 0        
         for i in range(maxNum_Battery):
