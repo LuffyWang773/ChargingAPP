@@ -124,7 +124,7 @@ num_T6 = st.sidebar.number_input("SOC4时长",value = 5)
 
 #################后台算法#################################
 # global df_Charging
-df_Charging = pd.DataFrame(columns=['curTime','load_T', 'loadRatio_T'])
+df_Charging = pd.DataFrame(columns=['curTime','load_T','loadRatio_T','num_chargedBattery'])
 
 @st.cache_data    #缓存装饰器
 def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Charging,num_T1,num_T2,num_T3,num_T4,num_T5,num_T6,num_P1,num_P2,num_P3,num_P4,num_P5,num_P6):
