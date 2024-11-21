@@ -96,7 +96,7 @@ class battery():  #定义电池充电阶段
 st.set_page_config(page_title="服务能力测算平台", page_icon=":articulated lorry:",initial_sidebar_state="auto")
 
 tolPower_Transformer0 = st.sidebar.number_input("变压器总功率",value = 1250, step = 1)
-Conversion_coeff = st.sidebar.number_input("功率因数",value = 0.95*0.99)
+Conversion_coeff = st.sidebar.number_input("功率因数",value = 0.95, step = 0.01)
 tolPower_Transformer = st.sidebar.number_input("视在功率",value = int(tolPower_Transformer0*Conversion_coeff))
 maxNum_Battery = st.sidebar.number_input("电池数量",value = 4, min_value = 2, step = 1)
 
@@ -124,11 +124,18 @@ num_T6 = st.sidebar.number_input("SOC4时长",value = 5)
 
 #################后台算法#################################
 # global df_Charging
-df_Charging = pd.DataFrame(columns=['curTime','load_T','loadRatio_T','num_chargedBattery'])
+# global num_chargedBattery
+# num_chargedBattery = 0
+df_Charging = pd.DataFrame(columns=['curTime','load_T', 'loadRatio_T'])
+# 初始化 State 对象
+state1 = st.empty()  # num_chargedBattery
+state2 = st.empty()  # df_Charging
 
 @st.cache_data    #缓存装饰器
 def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Charging,num_T1,num_T2,num_T3,num_T4,num_T5,num_T6,num_P1,num_P2,num_P3,num_P4,num_P5,num_P6):
 
+    # global df_Charging
+    # global num_chargedBattery
     df_Charging = df_Charging.drop(df_Charging.index, inplace=False) #内容清空, 创建并返回新的对象  inplace = False
 
     #切换电池型号
@@ -162,21 +169,22 @@ def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Chargi
                 curPower_BatteryList.append(names['curPower_Battery' + str(num)])
             curPower_BatteryArray = np.array(curPower_BatteryList)
             
+            #更新每块电池的充电状态,判断功率是否受限 
             for i in range(curNum_Battery):                             
                 if names['Battery' + str(i)]['Positive_Clock'] < clockLength  or names['Battery' + str(i)]['charged_power'] < powerVolume:
-        #            resPower_Transformer 
+        #            resPower_Transformer 变压器剩余功率 = 变压器总功率 - 电池仓中当前电池充电总功率
                     resPower_Transformer = tolPower_Transformer - sum(np.delete(curPower_BatteryArray, i))    
         
-                    if resPower_Transformer > 0:   
+                    if resPower_Transformer > 0:    #有剩余功率
                         names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = charge_Limitedphase3(names['Battery' + str(i)]['Positive_Clock'],names['Battery' + str(i)]['SOC'],resPower_Transformer,names['Battery' + str(i)]['charged_power'],clockLength,powerVolume,Battery)
-                    else:           
+                    else:                           #无剩余功率
                         names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = 0, names['Battery' + str(i)]['SOC'],names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power']
-                else:               
+                else:                               #电池充满电，服务能力加一，状态重置
                     names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = Battery.P1, 1, 0, 0
                     num_chargedBattery += 1
-                curPower_BatteryArray[i] = names['curPower_Battery' + str(i)] 
+                curPower_BatteryArray[i] = names['curPower_Battery' + str(i)] # 功率更新
                 
-        else:         
+        else:  # 初始满电电池替换完毕后正常刷新          
             curPower_BatteryList = []  #[0]* maxNum_Battery
             #汇总所有电池的充电功率，方便计算变压器剩余功率
             for num in range(maxNum_Battery):       
@@ -186,13 +194,14 @@ def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Chargi
             #更新每块电池的充电状态,判断功率是否受限 
             for i in range(maxNum_Battery):                             
                 if names['Battery' + str(i)]['Positive_Clock'] < clockLength  or names['Battery' + str(i)]['charged_power'] < powerVolume:
+        #            resPower_Transformer 变压器剩余功率 = 变压器总功率 - 电池仓中当前电池充电总功率
                     resPower_Transformer = tolPower_Transformer - sum(np.delete(curPower_BatteryArray, i))    
         
                     if resPower_Transformer > 0:    #有剩余功率
                         names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = charge_Limitedphase3(names['Battery' + str(i)]['Positive_Clock'],names['Battery' + str(i)]['SOC'],resPower_Transformer,names['Battery' + str(i)]['charged_power'],clockLength,powerVolume,Battery)
                     else:                           #无剩余功率
                         names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = 0, names['Battery' + str(i)]['SOC'],names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power']
-                else:                  
+                else:                               #电池充满电，服务能力加一，状态重置
                     names['curPower_Battery' + str(i)], names['Battery' + str(i)]['SOC'], names['Battery' + str(i)]['Positive_Clock'], names['Battery' + str(i)]['charged_power'] = Battery.P1, 1, 0, 0
                     num_chargedBattery += 1
                 curPower_BatteryArray[i] = names['curPower_Battery' + str(i)] # 功率更新
@@ -224,14 +233,14 @@ def Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Chargi
     load_Transformer, loadRatio_Transformer = df_Charging.loc[:,"load_T"],df_Charging.loc[:,"loadRatio_T"]
     #x_list = [x * x for x in range(ChargingTime_interval)]
 
+    state1.value = num_chargedBattery
+    # state2.value = df_Charging
     return num_chargedBattery,df_Charging
 
-
 ##############前端输出#################################
-num_chargedBattery,df_Charging = Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Charging,num_T1,num_T2,num_T3,num_T4,num_T5,num_T6,num_P1,num_P2,num_P3,num_P4,num_P5,num_P6)
-st.write("服务能力:{}块".format(num_chargedBattery))
-# num_chargedBattery,df_Charging = st.button('点击计算', on_click = Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery))
-
+if st.button('计算服务能力'):
+    num_chargedBattery,df_Charging = Charging(ChargingTime_interval,tolPower_Transformer,maxNum_Battery,df_Charging,num_T1,num_T2,num_T3,num_T4,num_T5,num_T6,num_P1,num_P2,num_P3,num_P4,num_P5,num_P6)
+    st.write("服务能力:{}块".format(num_chargedBattery))
 
 load_Transformer, loadRatio_Transformer = df_Charging.loc[:,"load_T"],df_Charging.loc[:,"loadRatio_T"]
 #x_list = [x * x for x in range(ChargingTime_interval)]
@@ -263,9 +272,8 @@ options = {
             "name": "负荷率",
             "type": "line",
             "stack": "总量",
-             "data": loadRatio_Transformer2,
+            "data": loadRatio_Transformer2,
         },
-
     ],
 }
 st_echarts(options=options)
